@@ -7,6 +7,23 @@ Original file is located at
     https://colab.research.google.com/drive/1gKQJrXWp-X3nHjELpJ-Zu-MUfRvtYI-f
 """
 
+import requests
+import mediacloud.api
+import mediacloud.tags
+import datetime
+import pandas
+import newspaper
+from newspaper import Article
+from newspaper import fulltext
+import nltk
+import csv
+import re
+
+
+def calculateTF(term_count, all_words_count):
+    return term_count / all_words_count
+
+
 def limited_matching_stories(mc_client, q, fq):
     """
     Return all the stories matching a query within Media Cloud. Page through the results automatically.
@@ -28,105 +45,89 @@ def limited_matching_stories(mc_client, q, fq):
             last_id = page[-1]['processed_stories_id']
     return stories
 
-def removeQuotes(words):
-  newString = ""
-  inQuote = False
-  for word in words:
-    if (word[0] == '"'):
-      inQuote = True
-    if (not inQuote):
-      newString += (word + " ")
-    if (word[len(word) - 1] == '"'):
-      inQuote = False
-    
-  return newString
 
-import requests
+def removeQuotes(words):
+    newString = ""
+    inQuote = False
+    for word in words:
+        if (word[0] == '"'):
+            inQuote = True
+        if (not inQuote):
+            newString += (word + " ")
+        if (word[len(word) - 1] == '"'):
+            inQuote = False
+
+    return newString
+
 
 def url_parcer(url):
-  try:
-    data = []
-    article = Article(url)
-    article.download()
-    article.parse()
-    article.nlp()
-    #print("Made it checkpoint 1")
-    words = article.text.split()
-    wordCount = len(words)
-    topicAppearances = 0 
-    #print("Made it checkpoint 2")
-    numQuotes = 0
-    for word in words:
-      if (word[0] == '"'):
-        numQuotes += 1
-      #elif (word.toLower() == topic):
-      #  topicAppearances += 1
-    r = requests.post("https://api.deepai.org/api/sentiment-analysis", data = {'text': removeQuotes(words)}, headers = {'api-key': '251b7704-114d-416a-8309-6913c2eac75b'})#4a102c57-b6c1-4f44-b192-294b47e8cda2'})
-    #print("Made it checkpoint 3")
-    data.append(wordCount)
-    data.append(topicAppearances)
-    data.append(numQuotes)
-    print("r:", r)
-    print("r.json():", r.json())
-    print("r.json()['output']: ", r.json()['output'])
-    #print("Made it checkpoint 4")
-    data.append(r.json()['output'])
-    #print("Made it checkpoint 5")
-    #data.append(similarity)
-    return data
-  except:
-    return []
+    try:
+        data = []
+        article = Article(url)
+        article.download()
+        article.parse()
+        article.nlp()
+        words = article.text.split()
+        wordCount = len(words)
+        topicAppearances = 0
+        numQuotes = 0
+        regex = re.compile('[^a-zA-Z]')
+        for word in words:
+            if (word[0] == '"'):
+                numQuotes += 1
+            temp_word = regex.sub('', word)
+            if word.lower() == topic:
+                topicAppearances += 1
+        r = requests.post("https://api.deepai.org/api/sentiment-analysis", data={'text': removeQuotes(words)}, headers={
+            'api-key': '251b7704-114d-416a-8309-6913c2eac75b'})  # 4a102c57-b6c1-4f44-b192-294b47e8cda2'})
+        data.append(wordCount)
+        data.append(topicAppearances)
+        data.append(numQuotes)
+        print("r:", r)
+        print("r.json():", r.json())
+        print("r.json()['output']: ", r.json()['output'])
+        data.append(r.json()['output'])
+        tf = calculateTF(topicAppearances, wordCount)
+        data.append(tf)
+        return data
+    except:
+        return []
 
-import mediacloud.api
-import datetime
-import csv
-import pandas
 
 mc = mediacloud.api.MediaCloud('74ebee12e7edefed3f3e684af66bf346e319bc117668b02ceafeca2cfc554bfd')
 startDate = datetime.date(2020, 10, 10)
 endDate = datetime.date(2020, 10, 17)
 date_range_2019 = mc.dates_as_query_clause(startDate, endDate)
-topic = input("Enter a topic: ")
+topic = input("Enter a topic: ").lower()
 uk_query = '"' + topic + '" and tags_id_stories:8878466'
-#print(uk_query)
 res = mc.storyCount(uk_query, date_range_2019)
 all_stories = limited_matching_stories(mc, uk_query, date_range_2019)
-#print(all_stories)
-#print(res)#['count'])
 
-import mediacloud.tags
 for s in all_stories:
     # see the "language" notebook for more details on themes
-    theme_tag_names = ','.join([t['tag'] for t in s['story_tags'] if t['tag_sets_id'] == mediacloud.tags.TAG_SET_NYT_THEMES])
+    theme_tag_names = ','.join(
+        [t['tag'] for t in s['story_tags'] if t['tag_sets_id'] == mediacloud.tags.TAG_SET_NYT_THEMES])
     s['themes'] = theme_tag_names
 # now write the CSV
-#import csv
-fieldnames = ['stories_id', 'publish_date', 'title', 'url', 'language', 'ap_syndicated', 'themes', 'media_id', 'media_name', 'media_url']
+fieldnames = ['stories_id', 'publish_date', 'title', 'url', 'language', 'ap_syndicated', 'themes', 'media_id',
+              'media_name', 'media_url']
 with open('story-list.csv', 'w', newline='') as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
     writer.writeheader()
     for s in all_stories:
         writer.writerow(s)
 
-
-import newspaper
-from newspaper import Article
-from newspaper import fulltext
-import nltk
-import requests
-import csv
-
 urls = []
 dates = []
 titles = []
 
 with open("story-list.csv") as csv_file:
-  csv_reader = csv.reader(csv_file, delimiter = ',')
-  for r in csv_reader:
-    if r[3] not in urls: # Eliminates repeats
-      urls.append(r[3])
-      dates.append(r[1])
-      titles.append(r[2])
+    csv_reader = csv.reader(csv_file, delimiter=',')
+    for r in csv_reader:
+        if r[3] not in urls:  # Eliminates repeats
+            urls.append(r[3])
+            dates.append(r[1])
+            titles.append(r[2])
 urls = urls[1:]
 dates = dates[1:]
 titles = titles[1:]
@@ -134,70 +135,64 @@ print(topic)
 print(len(urls))
 url_data = {}
 for url in urls:
-  url_data[url] = url_parcer(url)
+    url_data[url] = url_parcer(url)
 print(url_data)
 print("done")
 
-
 ultimateMeanVibe = 0
 for data in url_data:
-  vibeCount = 0
-  print(url_data)
-  for i in range(len(url_data[data])):
-    print("\n")
+    vibeCount = 0
     print(url_data[data])
-    print(url_data[data][i])
-    print(i)
-  vibeCount += url_data[data][3].count('Verynegative') * 1
-  vibeCount += url_data[data][3].count('Negative') * 2
-  vibeCount += url_data[data][3].count('Neutral') * 3
-  vibeCount += url_data[data][3].count('Positive') * 4
-  vibeCount += url_data[data][3].count('Verypositive') * 5
-  ultimateMeanVibe += (vibeCount / len(url_data[data][3]))
-  vibeCount /= len(url_data[data][3])
-  vibeCount -= 3 # centers data about 0
-  url_data[data].append(vibeCount)
-
+    vibeCount += url_data[data][3].count('Verynegative') * 1
+    vibeCount += url_data[data][3].count('Negative') * 2
+    vibeCount += url_data[data][3].count('Neutral') * 3
+    vibeCount += url_data[data][3].count('Positive') * 4
+    vibeCount += url_data[data][3].count('Verypositive') * 5
+    ultimateMeanVibe += (vibeCount / len(url_data[data][3]))
+    vibeCount /= len(url_data[data][3])
+    vibeCount -= 3  # centers data about 0
+    url_data[data].append(vibeCount)
 
 ultimateMeanVibe /= len(url_data)
 ultimateMeanVibe -= 3
 
 penalties = {}
-meanVibeWeight = 3 # weight to change over time
+meanVibeWeight = 3  # weight to change over time
 numDaysWeight = 1.5
 quoteWeight = 20
 titleWordWeight = .4
 date_time_now = datetime.datetime.now()
 
 for data in url_data:
-  penalties[data] = (abs(url_data[data][4] - ultimateMeanVibe)) * meanVibeWeight # data piece will be anywhere from 0 to 18 penalty, where it normally does not exceed 9
-  print(url_data[data][2])
-  date_time_written = datetime.datetime.strptime(dates[urls.index(data)], '%Y-%m-%d %H:%M:%S')
-  deltadatetime = date_time_now - date_time_written
-  penalties[data] += (deltadatetime.days / 14) * numDaysWeight
-  penalties[data] += max(-.5, -((url_data[data][2] / url_data[data][0]) * quoteWeight))
+    penalties[data] = (abs(url_data[data][
+                               4] - ultimateMeanVibe)) * meanVibeWeight  # data piece will be anywhere from 0 to 18 penalty, where it normally does not exceed 9
+    print(url_data[data][2])
+    date_time_written = datetime.datetime.strptime(dates[urls.index(data)], '%Y-%m-%d %H:%M:%S')
+    deltadatetime = date_time_now - date_time_written
+    penalties[data] += (deltadatetime.days / 14) * numDaysWeight
+    penalties[data] += max(-.5, -((url_data[data][2] / url_data[data][0]) * quoteWeight))
 
-  keywordsInTitle = 0
-  titleWords = titles[urls.index(data)].split()
-  a = Article(data)
-  a.download()
-  a.parse()
-  a.nlp()
-  for keyword in a.keywords:
-    for word in titleWords:
-      if (keyword == word):
-        keywordsInTitle += 1
-  penalties[data] += -(keywordsInTitle * titleWordWeight)
+    keywordsInTitle = 0
+    titleWords = titles[urls.index(data)].split()
+    a = Article(data)
+    a.download()
+    a.parse()
+    a.nlp()
+    for keyword in a.keywords:
+        for word in titleWords:
+            if (keyword == word):
+                keywordsInTitle += 1
+    penalties[data] += -(keywordsInTitle * titleWordWeight)
 
 newDic = {k: v for k, v in sorted(penalties.items(), key=lambda item: item[1])}
 newerDic = {}
 
 newerDicVals = 0
 for key in newDic:
-  if (newerDicVals > 49):
-    break
-  newerDic[key] = newDic[key]
-  newerDicVals += 1
+    if (newerDicVals > 49):
+        break
+    newerDic[key] = newDic[key]
+    newerDicVals += 1
 
-(pandas.DataFrame.from_dict(data=newerDic, orient='index', columns=['penalty']).to_csv('pandadic.csv', header=True))
-
+(pandas.DataFrame.from_dict(data=newerDic, orient='index', columns=['url', 'penalty']).to_csv('pandadic.csv',
+                                                                                              header=True))

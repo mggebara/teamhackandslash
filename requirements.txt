@@ -1,0 +1,4 @@
+mediacloud
+pandas
+newspaper
+nltk
