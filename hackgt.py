@@ -88,7 +88,7 @@ def url_parcer(url):
         data.append(tf)
         return data
     except:
-        return []
+        return [0, 0, ['Neutral']]
 
 
 mc = mediacloud.api.MediaCloud('74ebee12e7edefed3f3e684af66bf346e319bc117668b02ceafeca2cfc554bfd')
