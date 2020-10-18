@@ -37,7 +37,7 @@ def limited_matching_stories(mc_client, q, fq):
     stories = []
     while (len(stories) < 500 and more_stories):
         page = mc_client.storyList(q, fq, last_processed_stories_id=last_id, rows=500, sort='processed_stories_id')
-        print("  got one page with {} stories".format(len(page)))
+        # print("  got one page with {} stories".format(len(page)))
         if len(page) == 0:
             more_stories = False
         else:
@@ -83,9 +83,6 @@ def url_parcer(url):
         data.append(wordCount)
         data.append(topicAppearances)
         data.append(numQuotes)
-        print("r:", r)
-        print("r.json():", r.json())
-        print("r.json()['output']: ", r.json()['output'])
         data.append(r.json()['output'])
         tf = calculateTF(topicAppearances, wordCount)
         data.append(tf)
@@ -131,18 +128,13 @@ with open("story-list.csv") as csv_file:
 urls = urls[1:]
 dates = dates[1:]
 titles = titles[1:]
-print(topic)
-print(len(urls))
 url_data = {}
 for url in urls:
     url_data[url] = url_parcer(url)
-print(url_data)
-print("done")
 
 ultimateMeanVibe = 0
 for data in url_data:
     vibeCount = 0
-    print(url_data[data])
     vibeCount += url_data[data][3].count('Verynegative') * 1
     vibeCount += url_data[data][3].count('Negative') * 2
     vibeCount += url_data[data][3].count('Neutral') * 3
@@ -166,7 +158,6 @@ date_time_now = datetime.datetime.now()
 for data in url_data:
     penalties[data] = (abs(url_data[data][
                                4] - ultimateMeanVibe)) * meanVibeWeight  # data piece will be anywhere from 0 to 18 penalty, where it normally does not exceed 9
-    print(url_data[data][2])
     date_time_written = datetime.datetime.strptime(dates[urls.index(data)], '%Y-%m-%d %H:%M:%S')
     deltadatetime = date_time_now - date_time_written
     penalties[data] += (deltadatetime.days / 14) * numDaysWeight
